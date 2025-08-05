@@ -5,12 +5,12 @@ from flask import Flask, render_template, flash, redirect, url_for, session, log
 from flask_sqlalchemy import SQLAlchemy # type: ignore
 from collections.abc import Mapping
 
+
 ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg']
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 db = SQLAlchemy(app)
 app.secret_key = "m4xpl0it"
- 
 
 def make_token():
     """
@@ -39,13 +39,7 @@ def index_auth():
     return render_template("index_auth.html",sessionId=my_id)
 
 
-@app.route("/instruct")
-def instruct():
-    return render_template("instructions.html")
 
-@app.route("/upload")
-def bmi():
-    return render_template("bmi.html")
 
 @app.route("/diseases")
 def diseases():
@@ -106,6 +100,7 @@ from joblib import load
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
+
 def predict_symptom(user_input, symptom_list):
     # Convert user input to lowercase and split into tokens
     user_input_tokens = user_input.lower().replace("_"," ").split()
@@ -121,6 +116,7 @@ def predict_symptom(user_input, symptom_list):
         for i, token in enumerate(set(user_input_tokens + symptom_tokens)):
             count_vector[0][i] = user_input_tokens.count(token)
             count_vector[1][i] = symptom_tokens.count(token)
+            
 
         # Calculate cosine similarity between count vectors
         similarity = cosine_similarity(count_vector)[0][1]
@@ -130,6 +126,22 @@ def predict_symptom(user_input, symptom_list):
     max_score_index = np.argmax(similarity_scores)
     return symptom_list[max_score_index]
 
+def calculate_bmi(height_cm, weight_kg):
+    try:
+        height_m = height_cm / 100.0
+        bmi = weight_kg / (height_m ** 2)
+        if bmi < 18.5:
+            category = "Underweight"
+        elif 18.5 <= bmi < 25:
+            category = "Normal weight"
+        elif 25 <= bmi < 30:
+            category = "Overweight"
+        else:
+            category = "Obesity"
+        return round(bmi, 2), category
+    except Exception as e:
+        return None, str(e)
+
 
 
 
@@ -138,7 +150,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # Load the dataset into a pandas dataframe
-df = pd.read_excel('C:/Users/yashi/OneDrive/Desktop/7th sem/project/AI healthcare chatbot project/flask/dataset.xlsx')
+df = pd.read_excel('C:/Users/yashi/OneDrive/Desktop/Ai project/project/disease prediction/flask/dataset.xlsx')
 
 # Get all unique symptoms
 symptoms = set()
@@ -297,10 +309,10 @@ def chat_msg():
         currentState = userSession.get(sessionId)
 
         if currentState ==-1:
-            response.append("Hi "+user_message+", To predict your disease based on symptopms, we need some information about you. Please type ok and provide details accordingly.")
+            response.append("Hi "+user_message+", To predict your disease based on symptoms, we need some information about you. Please type <b> OK </b> and provide details accordingly.")
             userSession[sessionId] = userSession.get(sessionId) +1
-            all_result['name'] = user_message            
-
+            all_result['name'] = user_message  
+       
         if currentState==0:
             username = all_result['name']
             response.append(username+", what is your age?")
@@ -312,35 +324,76 @@ def chat_msg():
             if len(result)==0:
                 response.append("Invalid input please provide valid age.")
             else:                
-                if float(result[0])<=0 or float(result[0])>=130:
+                if float(result[0])<=0 or float(result[0])>=120 :
                     response.append("Invalid input please provide valid age.")
                 else:
                     all_result['age'] = float(result[0])
                     username = all_result['name']
-                    response.append(username+", Choose Option ?")            
+                    response.append(username+", Choose an option ?")            
                     response.append("1. Predict Disease")
-                    response.append("2. Check Disease Symtoms")
+                    response.append("2. Check Disease Symptoms")
+                    response.append("3. Check Body Mass Index")
+                   
                     userSession[sessionId] = userSession.get(sessionId) +1
-
-        if currentState==2:
-
-            if '2' in user_message.lower() or 'check' in user_message.lower():
+        if currentState == 2:
+            if '3' in user_message or 'bmi' in user_message.lower():
                 username = all_result['name']
-                response.append(username+", What's your Disease Name?")
-                userSession[sessionId] = 20
+                response.append(username + ", please enter your height in cm and weight in kg (e.g., 170, 70)")
+                userSession[sessionId] = 9    
+            elif '1' in user_message or 'predict' in user_message.lower():
+                    username = all_result['name']
+                    response.append(username + ", what symptoms are you experiencing?")
+                    response.append('<a href="/diseases" target="_blank">Symptoms List</a>')   
+                    userSession[sessionId] = 3
+            elif '2' in user_message or 'symptom' in user_message.lower():
+                 username = all_result['name']
+                 response.append(username + ", what's your disease name?")
+                 userSession[sessionId] = 20                     
+        
+
+        if currentState==9:
+            try:
+               tokens = re.findall(r'\d+(?:\.\d+)?', user_message)
+               if len(tokens) >= 2:
+                   height = float(tokens[0])
+                   weight = float(tokens[1])
+                   bmi, category = calculate_bmi(height, weight)
+                   response.append(f"Your BMI is: <b>{bmi}</b>  which falls in the <b>{category}</b> category.")
+                   username = all_result['name']
+                   response.append(username+", Would you like to check anything else ? ") 
+                   userSession[sessionId] = 10
+           
+               else:
+                response.append("Please enter both height and weight (e.g., 170 , 70).")
+            except:
+             response.append("Invalid input. Please enter height and weight in numeric format.")
+             
+        if currentState == 10:
+            if 'yes' in user_message.lower():
+                 username = all_result['name']
+                 response.append(username + ", Choose an option ?")            
+                 response.append("1. Predict Disease")
+                 response.append("2. Check Disease Symptoms")
+                 response.append("3. Check Body Mass Index")
+                 userSession[sessionId] = 2
+            elif 'no' in user_message.lower():
+                response.append("Thank you for using our application.")
+                userSession[sessionId] = 12
             else:
+                response.append("Please respond with Yes or No.")
 
-                username = all_result['name']
-                response.append(username+", What symptoms are you experiencing?")         
-                response.append('<a href="/diseases" target="_blank">Symptoms List</a>')   
-                userSession[sessionId] = userSession.get(sessionId) +1
+
+ 
+
+           
+
 
         if currentState==3:
 
             
             all_result['symptoms'].extend(user_message.split(","))
             username = all_result['name']
-            response.append(username+", What kind of more symptoms are you currently experiencing?")            
+            response.append(username+", Could you describe some more symptoms you're suffering from ? \nIF no then Press '1' to check the disease.")       
             response.append("1. Check Disease")   
             response.append('<a href="/diseases" target="_blank">Symptoms List</a>')   
             userSession[sessionId] = userSession.get(sessionId) +1
@@ -349,17 +402,20 @@ def chat_msg():
         if currentState==4:
 
             if '1' in user_message or 'disease' in user_message:
+                username = all_result['name']
                 disease,type = predict_disease_from_symptom(all_result['symptoms'])  
                 response.append("<b>The following disease may be causing your discomfort</b>")
                 response.append(disease)
                 response.append(f'<a href="https://www.google.com/search?q={type} disease hospital near me" target="_blank">Search Near By Hospitals</a>')   
+                response.append(username+", Would you like to check anything else ? ") 
                 userSession[sessionId] = 10
 
             else:
 
                 all_result['symptoms'].extend(user_message.split(","))
                 username = all_result['name']
-                response.append(username+", Could you describe the symptoms you're suffering from?")            
+                
+                response.append(username+", would you like to add more symptoms for the prediction?  \nIF no then Press '1' to check the disease.")             
                 response.append("1. Check Disease")   
                 response.append('<a href="/diseases" target="_blank">Symptoms List</a>')   
                 userSession[sessionId] = userSession.get(sessionId) +1
@@ -367,11 +423,12 @@ def chat_msg():
     
         if currentState==5:
             if '1' in user_message or 'disease' in user_message:
+                username = all_result['name']
                 disease,type = predict_disease_from_symptom(all_result['symptoms'])  
                 response.append("<b>The following disease may be causing your discomfort</b>")
                 response.append(disease)
                 response.append(f'<a href="https://www.google.com/search?q={type} disease hospital near me" target="_blank">Search Near By Hospitals</a>')   
-
+                response.append(username+", Would you like to check anything else ? ") 
                 userSession[sessionId] = 10
 
             else:
@@ -390,11 +447,12 @@ def chat_msg():
                 response.append("The following disease may be causing your discomfort")
                 response.append(disease)
                 response.append(f'<a href="https://www.google.com/search?q={type} disease hospital near me" target="_blank">Search Near By Hospitals</a>')   
-                userSession[sessionId] = 10
+               
+                userSession[sessionId] = 12
             else:
                 all_result['symptoms'].extend(user_message.split(","))
                 username = all_result['name']
-                response.append(username+", What symptoms have you been experiencing lately?")            
+                response.append(username+", What are the symptoms have you been experiencing lately?")            
                 response.append("1. Check Disease")   
                 response.append('<a href="/diseases" target="_blank">Symptoms List</a>')   
                 userSession[sessionId] = userSession.get(sessionId) +1
@@ -405,7 +463,8 @@ def chat_msg():
                 response.append("<b>The following disease may be causing your discomfort</b>")
                 response.append(disease)
                 response.append(f'<a href="https://www.google.com/search?q={type} disease hospital near me" target="_blank">Search Near By Hospitals</a>')   
-                userSession[sessionId] = 10
+               
+                userSession[sessionId] = 12
             else:
                 all_result['symptoms'].extend(user_message.split(","))
                 username = all_result['name']
@@ -415,25 +474,27 @@ def chat_msg():
                 userSession[sessionId] = userSession.get(sessionId) +1
 
 
-        if currentState==8:    
+        if currentState==8:   
 
             if '1' in user_message or 'disease' in user_message:
                 disease,type = predict_disease_from_symptom(all_result['symptoms'])  
                 response.append("The following disease may be causing your discomfort")
                 response.append(disease)
                 response.append(f'<a href="https://www.google.com/search?q={type} disease hospital near me" target="_blank">Search Near By Hospitals</a>')   
-                userSession[sessionId] = 10
+               
+                userSession[sessionId] = 12
             else:
                 all_result['symptoms'].extend(user_message.split(","))
                 username = all_result['name']
-                response.append(username+", What symptoms have you been experiencing lately?")            
+                response.append(username+", What are the symptoms have you been experiencing lately?")            
                 response.append("1. Check Disease")   
                 response.append('<a href="/diseases" target="_blank">Symptoms List</a>')   
                 userSession[sessionId] = userSession.get(sessionId) +1
-
-        if currentState==10:
-            response.append('<a href="/user" target="_blank">Click here to Predict Again</a>')   
-
+                
+        if currentState==12:
+            response.append("Thank you for using our application.")
+            response.append('<a href="/user" target="_blank">Click here to Predict Again</a>') 
+            
         
         if currentState==20:
 
@@ -444,13 +505,16 @@ def chat_msg():
                     response.append(sym.capitalize())
 
             else:response.append(data)
-
-            userSession[sessionId] = 2
+            
             response.append("")
-            response.append("Choose Option ?")            
-            response.append("1. Predict Disease")
-            response.append("2. Check Disease Symtoms")
-
+            username = all_result['name']
+                      
+          
+            
+          
+            userSession[sessionId] = 10
+          
+            response.append(username+", Would you like to check anything else ?") 
 
 
 
